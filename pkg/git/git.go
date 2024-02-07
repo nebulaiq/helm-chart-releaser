@@ -88,6 +88,17 @@ func (g *Git) GetPushURL(remote string, token string) (string, error) {
 	return pushURLWithToken, nil
 }
 
+func (g *Git) HasBranch(remote string, branch string) (bool, error) {
+	result, err := exec.Command("git", "ls-remote", "--heads", remote, branch).Output()
+	if err != nil {
+		return false, err
+	}
+
+	// should have this string refs/heads/{branch}
+	headString := fmt.Sprintf("refs/heads/%s", branch)
+	return strings.Contains(string(result), headString), nil
+}
+
 func runCommand(workingDir string, command *exec.Cmd) error {
 	command.Dir = workingDir
 	command.Stdout = os.Stdout

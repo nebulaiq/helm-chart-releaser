@@ -16,17 +16,17 @@ builds:
     env:
       - CGO_ENABLED=0
     goarch:
-      - amd64
-      - arm
+#      - amd64
+#      - arm
       - arm64
-      - s390x
-      - ppc64le
+#      - s390x
+#      - ppc64le
     goarm:
       - 7
     goos:
-      - linux
+#      - linux
       - darwin
-      - windows
+#      - windows
     ignore:
       - goos: windows
         goarch: arm

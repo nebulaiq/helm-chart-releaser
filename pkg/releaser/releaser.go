@@ -66,6 +66,7 @@ type Git interface {
 	Push(workingDir string, args ...string) error
 	Pull(workingDir string, args ...string) error
 	GetPushURL(remote string, token string) (string, error)
+	HasBranch(remote string, branch string) (bool, error)
 }
 
 type DefaultHTTPClient struct{}
@@ -115,7 +116,11 @@ func (r *Releaser) UpdateIndexFile() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer r.git.RemoveWorktree("", worktree) // nolint: errcheck
+	defer func() {
+		if err := r.git.RemoveWorktree("", worktree); err != nil {
+			fmt.Printf("Failed to remove worktree: %v", err)
+		}
+	}()
 
 	// if pages-index-path doesn't end with index.yaml we can try and fix it
 	if filepath.Base(r.config.PagesIndexPath) != "index.yaml" {
@@ -301,10 +306,27 @@ func (r *Releaser) addToIndexFile(indexFile *repo.IndexFile, url string) error {
 
 // CreateReleases finds and uploads Helm chart packages to GitHub
 func (r *Releaser) CreateReleases() error {
-	packages, err := r.getListOfPackages(r.config.PackagePath)
+	hasBranch, err := r.git.HasBranch(r.config.Remote, r.config.PagesBranch)
 	if err != nil {
 		return err
 	}
+
+	if !hasBranch {
+		return fmt.Errorf("must have %s branch pre-configured", r.config.PagesBranch)
+	}
+
+	worktree, err := r.git.AddWorktree("", r.config.Remote+"/"+r.config.PagesBranch)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := r.git.RemoveWorktree("", worktree); err != nil {
+			fmt.Printf("Failed to remove worktree: %v", err)
+		}
+	}()
+
+	packages, err := r.getListOfPackages(r.config.PackagePath)
 
 	if len(packages) == 0 {
 		return errors.Errorf("no charts found at %s", r.config.PackagePath)
@@ -346,12 +368,6 @@ func (r *Releaser) CreateReleases() error {
 		}
 
 		if r.config.PackagesWithIndex {
-			worktree, err := r.git.AddWorktree("", r.config.Remote+"/"+r.config.PagesBranch)
-			if err != nil {
-				return err
-			}
-			defer r.git.RemoveWorktree("", worktree) //nolint: errcheck
-
 			pkgTargetPath := filepath.Join(worktree, filepath.Base(p))
 			if err := copyFile(p, pkgTargetPath); err != nil {
 				return err
@@ -364,10 +380,12 @@ func (r *Releaser) CreateReleases() error {
 			if err := r.git.Commit(worktree, fmt.Sprintf("Publishing chart package for %s", releaseName)); err != nil {
 				return err
 			}
+		}
+	}
 
-			if err := r.pushToPagesBranch(worktree); err != nil {
-				return err
-			}
+	if r.config.Push {
+		if err := r.pushToPagesBranch(worktree); err != nil {
+			return err
 		}
 	}
 

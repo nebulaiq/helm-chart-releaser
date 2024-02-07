@@ -86,6 +86,11 @@ func (f *FakeGit) GetPushURL(remote string, token string) (string, error) {
 	return pushURLWithToken, nil
 }
 
+func (f *FakeGit) HasBranch(remote string, branch string) (bool, error) {
+	f.Called(remote, branch)
+	return true, nil
+}
+
 func (f *FakeGitHub) CreateRelease(ctx context.Context, input *github.Release) error {
 	f.Called(ctx, input)
 	f.release = input
@@ -510,6 +515,7 @@ func TestReleaser_ReleaseNotes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeGitHub := new(FakeGitHub)
+			fakeGit := new(FakeGit)
 			r := &Releaser{
 				config: &config.Options{
 					PackagePath:      "testdata/release-packages",
@@ -517,6 +523,8 @@ func TestReleaser_ReleaseNotes(t *testing.T) {
 				},
 				github: fakeGitHub,
 			}
+			fakeGit.On("AddWorktree", mock.Anything, mock.Anything).Return("/tmp/chart-releaser-012345678", nil)
+			fakeGit.On("RemoveWorktree", mock.Anything, mock.Anything).Return(nil)
 			fakeGitHub.On("CreateRelease", mock.Anything, mock.Anything).Return(nil)
 			err := r.CreateReleases()
 			assert.NoError(t, err)
